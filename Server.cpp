@@ -6,6 +6,7 @@
 #include <cerrno>
 #include <cstring>
 #include <poll.h>
+#include <fstream>
 
 int main()
 {
@@ -53,7 +54,7 @@ int main()
 	memset(fds, 0, sizeof(fds));
 
 	fds[0].fd = serverSocket;
-	fds[0].events = POLLIN;
+	fds[0].events = POLLIN | POLLOUT; // Add POLLOUT event
 
 	int numClients = 0;
 
@@ -92,7 +93,7 @@ int main()
 			{
 				numClients++;
 				fds[numClients].fd = newSocket;
-				fds[numClients].events = POLLIN;
+				fds[numClients].events = POLLIN | POLLOUT; // Add POLLOUT event
 			}
 			else
 			{
@@ -149,6 +150,36 @@ int main()
 							fds[i].fd = -1;
 						}
 					}
+				}
+			}
+			else if (fds[i].revents & POLLOUT) // Check if client socket is ready for writing
+			{
+				// Read file data from the server and send it to the client
+				std::ifstream file("file.txt", std::ios::binary);
+				if (file)
+				{
+					std::string fileData((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+					ssize_t bytesSent = send(fds[i].fd, fileData.c_str(), fileData.size(), 0);
+					if (bytesSent < 0)
+					{
+						if (errno == EWOULDBLOCK || errno == EAGAIN)
+						{
+							// Timeout occurred, handle it here
+							std::cerr << "Timeout occurred while sending file data." << std::endl;
+						}
+						else
+						{
+							std::cerr << "Failed to send file data. Error: " << strerror(errno) << std::endl;
+							close(fds[i].fd);
+							fds[i].fd = -1;
+						}
+					}
+				}
+				else
+				{
+					std::cerr << "Failed to open file." << std::endl;
+					close(fds[i].fd);
+					fds[i].fd = -1;
 				}
 			}
 		}

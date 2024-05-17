@@ -1,4 +1,5 @@
 #include <iostream>
+#include <fstream>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -36,25 +37,44 @@ int main()
 
 	std::cout << "Connected to the server." << std::endl;
 
-	std::cout << "Connected to the server." << std::endl;
-
-	// Send a message to the server
-	const char *message = "Hello, Server!";
-	if (send(clientSocket, message, strlen(message), 0) < 0)
+	// Open the file to upload
+	std::ifstream file("/path/to/file.txt", std::ios::binary);
+	if (!file)
 	{
-		std::cerr << "Failed to send the message." << std::endl;
+		std::cerr << "Failed to open the file." << std::endl;
+		return 1;
+	}
+
+	// Send the file contents to the server
+	char buffer[1024];
+	while (file.read(buffer, sizeof(buffer)))
+	{
+		if (send(clientSocket, buffer, file.gcount(), 0) < 0)
+		{
+			std::cerr << "Failed to send the file." << std::endl;
+			return 1;
+		}
+	}
+
+	// Close the file
+	file.close();
+
+	// Notify the server that the file upload is complete
+	if (send(clientSocket, "", 0, 0) < 0)
+	{
+		std::cerr << "Failed to send the file completion signal." << std::endl;
 		return 1;
 	}
 
 	// Receive a response from the server
-	char buffer[1024] = {0};
-	if (recv(clientSocket, buffer, sizeof(buffer), 0) < 0)
+	char response[1024] = {0};
+	if (recv(clientSocket, response, sizeof(response), 0) < 0)
 	{
 		std::cerr << "Failed to receive a response." << std::endl;
 		return 1;
 	}
 
-	std::cout << "Server response: " << buffer << std::endl;
+	std::cout << "Server response: " << response << std::endl;
 
 	// Close the socket
 	close(clientSocket);
