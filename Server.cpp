@@ -8,6 +8,32 @@
 #include <poll.h>
 #include <fstream>
 
+void receiveFile(int clientSocket)
+{
+	// Receive the file data from the client
+	char buffer[1024];
+	std::ofstream file("ReceivedFile.txt", std::ios::binary);
+	if (file)
+	{
+		ssize_t bytesRead;
+		while ((bytesRead = recv(clientSocket, buffer, sizeof(buffer), 0)) > 0)
+		{
+			file.write(buffer, bytesRead);
+		}
+
+		if (bytesRead < 0)
+		{
+			std::cerr << "Failed to receive the file data. Error: " << strerror(errno) << std::endl;
+		}
+
+		file.close();
+	}
+	else
+	{
+		std::cerr << "Failed to open file for writing." << std::endl;
+	}
+}
+
 int main()
 {
 	int serverSocket, newSocket;
@@ -133,21 +159,29 @@ int main()
 				{
 					std::cout << "Client message: " << buffer << std::endl;
 
-					// Send a response to the client
-					const char *response = "Hello, Client!";
-					ssize_t bytesSent = send(fds[i].fd, response, strlen(response), 0);
-					if (bytesSent < 0)
+					// Check if the client sent a file
+					if (std::string(buffer) == "SEND_FILE")
 					{
-						if (errno == EWOULDBLOCK || errno == EAGAIN)
+						receiveFile(fds[i].fd);
+					}
+					else
+					{
+						// Send a response to the client
+						const char *response = "Hello, Client!";
+						ssize_t bytesSent = send(fds[i].fd, response, strlen(response), 0);
+						if (bytesSent < 0)
 						{
-							// Timeout occurred, handle it here
-							std::cerr << "Timeout occurred while sending data." << std::endl;
-						}
-						else
-						{
-							std::cerr << "Failed to send the response. Error: " << strerror(errno) << std::endl;
-							close(fds[i].fd);
-							fds[i].fd = -1;
+							if (errno == EWOULDBLOCK || errno == EAGAIN)
+							{
+								// Timeout occurred, handle it here
+								std::cerr << "Timeout occurred while sending data." << std::endl;
+							}
+							else
+							{
+								std::cerr << "Failed to send the response. Error: " << strerror(errno) << std::endl;
+								close(fds[i].fd);
+								fds[i].fd = -1;
+							}
 						}
 					}
 				}
@@ -155,7 +189,7 @@ int main()
 			else if (fds[i].revents & POLLOUT) // Check if client socket is ready for writing
 			{
 				// Read file data from the server and send it to the client
-				std::ifstream file("file.txt", std::ios::binary);
+				std::ifstream file("File.txt", std::ios::binary);
 				if (file)
 				{
 					std::string fileData((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());

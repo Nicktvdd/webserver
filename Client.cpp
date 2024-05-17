@@ -38,7 +38,7 @@ int main()
 	std::cout << "Connected to the server." << std::endl;
 
 	// Open the file to upload
-	std::ifstream file("/path/to/file.txt", std::ios::binary);
+	std::ifstream file("File.txt", std::ios::binary);
 	if (!file)
 	{
 		std::cerr << "Failed to open the file." << std::endl;
