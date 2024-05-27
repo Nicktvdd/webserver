@@ -45,13 +45,23 @@ int main()
 		return 1;
 	}
 
+	// Send the "SEND_FILE" message to the server
+	const char *message = "SEND_FILE";
+	ssize_t bytesSent = send(clientSocket, message, strlen(message), 0);
+	if (bytesSent < 0)
+	{
+		std::cerr << "Failed to send the message. Error: " << strerror(errno) << std::endl;
+		return 1;
+	}
+
 	// Send the file contents to the server
 	char buffer[1024];
 	while (file.read(buffer, sizeof(buffer)))
 	{
-		if (send(clientSocket, buffer, file.gcount(), 0) < 0)
+		ssize_t bytesSent = send(clientSocket, buffer, file.gcount(), 0);
+		if (bytesSent < 0)
 		{
-			std::cerr << "Failed to send the file." << std::endl;
+			std::cerr << "Failed to send the file data. Error: " << strerror(errno) << std::endl;
 			return 1;
 		}
 	}
