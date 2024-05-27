@@ -76,6 +76,14 @@ int main()
 		return 1;
 	}
 
+	// Send the file completion signal to the server
+	const char *completionSignal = "FILE_COMPLETE";
+	if (send(clientSocket, completionSignal, strlen(completionSignal), 0) < 0)
+	{
+		std::cerr << "Failed to send the file completion signal." << std::endl;
+		return 1;
+	}
+
 	// Receive a response from the server
 	char response[1024] = {0};
 	if (recv(clientSocket, response, sizeof(response), 0) < 0)
