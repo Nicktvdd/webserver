@@ -7,147 +7,228 @@
 #include <cstring>
 #include <poll.h>
 #include <fstream>
+#include <vector>
+#include <algorithm>
 
-void receiveFile(int clientSocket)
+const int MAX_BUFFER_SIZE = 1024;
+const int MAX_CLIENTS = 10;
+const int SERVER_PORT = 8080;
+const std::string FILE_NAME = "ReceivedFile.txt";
+
+int createServerSocket()
 {
-	// Receive the file data from the client
-	char buffer[1024];
-	std::ofstream file("ReceivedFile.txt", std::ios::binary);
-	if (file)
-	{
-		ssize_t bytesRead;
-		while ((bytesRead = recv(clientSocket, buffer, sizeof(buffer), 0)) > 0)
-		{
-			file.write(buffer, bytesRead);
-		}
-
-		if (bytesRead < 0)
-		{
-			std::cerr << "Failed to receive the file data. Error: " << strerror(errno) << std::endl;
-		}
-
-		file.close();
-	}
-	else
-	{
-		std::cerr << "Failed to open file for writing." << std::endl;
-	}
-}
-
-int main()
-{
-	int serverSocket, newSocket;
-	struct sockaddr_in serverAddress, clientAddress;
-	socklen_t clientAddressLength;
-
-	// Create a TCP socket
-	serverSocket = socket(AF_INET, SOCK_STREAM, 0);
+	int serverSocket = socket(AF_INET, SOCK_STREAM, 0);
 	if (serverSocket == -1)
 	{
 		std::cerr << "Failed to create socket." << std::endl;
-		return 1;
+		exit(1);
 	}
+	return serverSocket;
+}
 
-	// Set up the server address
+void bindServerSocket(int serverSocket)
+{
+	struct sockaddr_in serverAddress;
 	serverAddress.sin_family = AF_INET;
 	serverAddress.sin_addr.s_addr = INADDR_ANY;
-	serverAddress.sin_port = htons(8080);
+	serverAddress.sin_port = htons(SERVER_PORT);
 
-	// Bind the socket to the server address
 	if (bind(serverSocket, (struct sockaddr *)&serverAddress, sizeof(serverAddress)) == -1)
 	{
 		std::cerr << "Failed to bind socket." << std::endl;
 		close(serverSocket);
-		return 1;
+		exit(1);
 	}
+}
 
-	// Set socket to non-blocking mode
-	int flags = fcntl(serverSocket, F_GETFL, 0);
-	fcntl(serverSocket, F_SETFL, flags | O_NONBLOCK);
+void setSocketNonBlocking(int socket)
+{
+	int flags = fcntl(socket, F_GETFL, 0);
+	fcntl(socket, F_SETFL, flags | O_NONBLOCK);
+}
 
-	// Listen for incoming connections
-	if (listen(serverSocket, 5) == -1)
+void listenForConnections(int serverSocket)
+{
+	if (listen(serverSocket, MAX_CLIENTS) == -1)
 	{
 		std::cerr << "Failed to listen for connections." << std::endl;
 		close(serverSocket);
-		return 1;
+	}
+}
+
+int acceptConnection(int serverSocket)
+{
+	struct sockaddr_in clientAddress;
+	socklen_t clientAddressLength = sizeof(clientAddress);
+	int newSocket = accept(serverSocket, (struct sockaddr *)&clientAddress, &clientAddressLength);
+	if (newSocket == -1)
+	{
+		if (errno != EAGAIN && errno != EWOULDBLOCK)
+		{
+			std::cerr << "Failed to accept connection." << std::endl;
+			close(serverSocket);
+		}
+	}
+	return newSocket;
+}
+
+ssize_t receiveData(int socket, char *buffer, size_t bufferSize)
+{
+	ssize_t bytesRead = recv(socket, buffer, bufferSize, 0);
+	if (bytesRead < 0)
+	{
+		if (errno != EWOULDBLOCK && errno != EAGAIN)
+		{
+			std::cerr << "Failed to receive data. Error: " << strerror(errno) << std::endl;
+			close(socket);
+		}
+	}
+	return bytesRead;
+}
+
+void sendData(int socket, const char *data, size_t dataSize)
+{
+	ssize_t totalBytesSent = 0;
+	while (totalBytesSent < dataSize)
+	{
+		ssize_t bytesSent = send(socket, data + totalBytesSent, dataSize - totalBytesSent, 0);
+		if (bytesSent < 0)
+		{
+			if (errno != EWOULDBLOCK && errno != EAGAIN)
+			{
+				std::cerr << "Failed to send data. Error: " << strerror(errno) << std::endl;
+				close(socket);
+			}
+		}
+		else if (bytesSent == 0)
+		{
+			std::cerr << "Connection closed by client." << std::endl;
+			close(socket);
+		}
+		else
+		{
+			totalBytesSent += bytesSent;
+		}
+	}
+}
+
+void receiveFile(int clientSocket)
+{
+    std::ofstream file(FILE_NAME, std::ios::binary);
+    char buffer[MAX_BUFFER_SIZE];
+    ssize_t bytesRead;
+
+    while ((bytesRead = recv(clientSocket, buffer, sizeof(buffer), 0)) > 0)
+    {
+        file.write(buffer, bytesRead);
+    }
+
+    if (bytesRead < 0)
+    {
+        std::cerr << "Failed to receive file." << std::endl;
+        close(clientSocket);
+    }
+
+    // Send a response back to the client
+    const char *response = "FILE_RECEIVED";
+    if (send(clientSocket, response, strlen(response), 0) < 0)
+    {
+        std::cerr << "Failed to send response." << std::endl;
+        close(clientSocket);
+    }
+}
+
+void handleClientMessage(int clientSocket, const std::string &message)
+{
+	std::string upperMessage;
+	std::transform(message.begin(), message.end(), std::back_inserter(upperMessage), ::toupper);
+	if (upperMessage == "SEND_FILE")
+	{
+		receiveFile(clientSocket);
+	}
+	else
+	{
+		const char *response = "Hello, Client!";
+		sendData(clientSocket, response, strlen(response));
+	}
+}
+
+void sendFileData(int clientSocket)
+{
+	std::ifstream file("File.txt", std::ios::binary);
+	if (!file)
+	{
+		std::cerr << "Failed to open file." << std::endl;
+		close(clientSocket);
+		return;
 	}
 
-	std::cout << "Server started. Listening on port 8080..." << std::endl;
+	char buffer[MAX_BUFFER_SIZE];
+	while (!file.eof())
+	{
+		file.read(buffer, sizeof(buffer));
+		sendData(clientSocket, buffer, file.gcount());
+	}
 
-	const int MAX_CLIENTS = 10;
-	struct pollfd fds[MAX_CLIENTS + 1]; // +1 for server socket
-	memset(fds, 0, sizeof(fds));
+	file.close();
+}
 
+int main()
+{
+	int serverSocket = createServerSocket();
+	bindServerSocket(serverSocket);
+	setSocketNonBlocking(serverSocket);
+	listenForConnections(serverSocket);
+
+	std::cout << "Server started. Listening on port " << SERVER_PORT << "..." << std::endl;
+
+	std::vector<pollfd> fds(MAX_CLIENTS + 1);
 	fds[0].fd = serverSocket;
-	fds[0].events = POLLIN | POLLOUT; // Add POLLOUT event
+	fds[0].events = POLLIN;
 
 	int numClients = 0;
 
 	while (true)
 	{
-		// Wait for events on the sockets
-		int numReady = poll(fds, numClients + 1, -1);
+		int numReady = poll(fds.data(), numClients + 1, -1);
 		if (numReady == -1)
 		{
 			std::cerr << "Failed to poll for events." << std::endl;
 			close(serverSocket);
-			return 1;
 		}
 
-		// Check if there is a new connection on the server socket
 		if (fds[0].revents & POLLIN)
 		{
-			// Accept a new connection
-			clientAddressLength = sizeof(clientAddress);
-			newSocket = accept(serverSocket, (struct sockaddr *)&clientAddress, &clientAddressLength);
-			if (newSocket == -1)
+			int newSocket = acceptConnection(serverSocket);
+			if (newSocket != -1)
 			{
-				std::cerr << "Failed to accept connection." << std::endl;
-				close(serverSocket);
-				return 1;
-			}
+				std::cout << "New connection established." << std::endl;
+				setSocketNonBlocking(newSocket);
 
-			std::cout << "New connection established." << std::endl;
-
-			// Set socket to non-blocking mode
-			flags = fcntl(newSocket, F_GETFL, 0);
-			fcntl(newSocket, F_SETFL, flags | O_NONBLOCK);
-
-			// Add the new client socket to the fds array
-			if (numClients < MAX_CLIENTS)
-			{
-				numClients++;
-				fds[numClients].fd = newSocket;
-				fds[numClients].events = POLLIN | POLLOUT; // Add POLLOUT event
-			}
-			else
-			{
-				std::cerr << "Maximum number of clients reached." << std::endl;
-				close(newSocket);
+				if (numClients < MAX_CLIENTS)
+				{
+					numClients++;
+					fds[numClients].fd = newSocket;
+					fds[numClients].events = POLLIN;
+				}
+				else
+				{
+					std::cerr << "Maximum number of clients reached." << std::endl;
+					close(newSocket);
+				}
 			}
 		}
 
-		// Check for events on client sockets
 		for (int i = 1; i <= numClients; i++)
 		{
 			if (fds[i].revents & POLLIN)
 			{
-				char buffer[1024] = {0};
-				ssize_t bytesReceived = recv(fds[i].fd, buffer, sizeof(buffer), 0);
-				if (bytesReceived < 0)
+				char buffer[MAX_BUFFER_SIZE] = {0};
+				ssize_t bytesReceived = receiveData(fds[i].fd, buffer, sizeof(buffer));
+				if (bytesReceived > 0)
 				{
-					if (errno == EWOULDBLOCK || errno == EAGAIN)
-					{
-						// Timeout occurred, handle it here
-						std::cerr << "Timeout occurred while receiving data." << std::endl;
-					}
-					else
-					{
-						std::cerr << "Failed to receive a message. Error: " << strerror(errno) << std::endl;
-						close(fds[i].fd);
-						fds[i].fd = -1;
-					}
+					std::cout << "Client message: " << buffer << std::endl;
+					handleClientMessage(fds[i].fd, buffer);
 				}
 				else if (bytesReceived == 0)
 				{
@@ -155,84 +236,21 @@ int main()
 					close(fds[i].fd);
 					fds[i].fd = -1;
 				}
-				else
-				{
-					std::cout << "Client message: " << buffer << std::endl;
-
-					// Check if the client sent a file
-					if (std::string(buffer) == "SEND_FILE")
-					{
-						receiveFile(fds[i].fd);
-					}
-					else
-					{
-						// Send a response to the client
-						const char *response = "Hello, Client!";
-						ssize_t bytesSent = send(fds[i].fd, response, strlen(response), 0);
-						if (bytesSent < 0)
-						{
-							if (errno == EWOULDBLOCK || errno == EAGAIN)
-							{
-								// Timeout occurred, handle it here
-								std::cerr << "Timeout occurred while sending data." << std::endl;
-							}
-							else
-							{
-								std::cerr << "Failed to send the response. Error: " << strerror(errno) << std::endl;
-								close(fds[i].fd);
-								fds[i].fd = -1;
-							}
-						}
-					}
-				}
 			}
-			else if (fds[i].revents & POLLOUT) // Check if client socket is ready for writing
+			else if (fds[i].revents & POLLOUT)
 			{
-				// Read file data from the server and send it to the client
-				std::ifstream file("ReceivedFile.txt", std::ios::binary);
-				if (file)
-				{
-					std::string fileData((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-					ssize_t bytesSent = send(fds[i].fd, fileData.c_str(), fileData.size(), 0);
-					if (bytesSent < 0)
-					{
-						if (errno == EWOULDBLOCK || errno == EAGAIN)
-						{
-							// Timeout occurred, handle it here
-							std::cerr << "Timeout occurred while sending file data." << std::endl;
-						}
-						else
-						{
-							std::cerr << "Failed to send file data. Error: " << strerror(errno) << std::endl;
-							close(fds[i].fd);
-							fds[i].fd = -1;
-						}
-					}
-				}
-				else
-				{
-					std::cerr << "Failed to open file." << std::endl;
-					close(fds[i].fd);
-					fds[i].fd = -1;
-				}
+				sendFileData(fds[i].fd);
+				close(fds[i].fd);
+				fds[i].fd = -1;
 			}
 		}
 
-		// Remove closed client sockets from the fds array
-		int j = 1;
-		for (int i = 1; i <= numClients; i++)
-		{
-			if (fds[i].fd != -1)
-			{
-				fds[j] = fds[i];
-				j++;
-			}
-		}
-		numClients = j - 1;
+		fds.erase(std::remove_if(fds.begin() + 1, fds.end(), [](const pollfd &fd) {
+			return fd.fd == -1;
+		}), fds.end());
+		numClients = fds.size() - 1;
 	}
 
-	// Close the server socket
 	close(serverSocket);
-
 	return 0;
 }
