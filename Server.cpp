@@ -189,7 +189,7 @@ int main()
 			else if (fds[i].revents & POLLOUT) // Check if client socket is ready for writing
 			{
 				// Read file data from the server and send it to the client
-				std::ifstream file("File.txt", std::ios::binary);
+				std::ifstream file("ReceivedFile.txt", std::ios::binary);
 				if (file)
 				{
 					std::string fileData((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
