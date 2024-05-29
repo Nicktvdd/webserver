@@ -134,16 +134,6 @@ void receiveFile(int clientSocket)
 	while ((bytesRead = recv(clientSocket, buffer, sizeof(buffer), 0)) > 0)
 	{
 		printf("Bytes read: %ld\n", bytesRead);
-/* 		if (strcmp(buffer, "FILE_COMPLETE") == 0)
-		{
-			const char *response = "FILE_RECEIVED";
-			if (send(clientSocket, response, strlen(response), 0) < 0)
-			{
-				std::cerr << "Failed to send response." << std::endl;
-				close(clientSocket);
-				break;
-			}
-		} */
 		file.write(buffer, bytesRead);
 		// Send an acknowledgement to the client
 
@@ -155,23 +145,14 @@ void receiveFile(int clientSocket)
 		}
 	}
 	file.close();
-
-/* 		if (bytesRead < 0)
-		{
-			std::cerr << "Failed to receive file. errno: " << strerror(errno) << std::endl;
-			close(clientSocket);
-		} */
-		printf("Bytes read: %ld\n", bytesRead);
 	// Send a response back to the client
-	std::cout << "buffer: " << buffer << "\n\n\n"
-			  << std::endl;
+	std::cout << "buffer: " << buffer << "\n\n\n" << std::endl;
 }
 
 void handleClientMessage(int clientSocket, const std::string &message)
 {
 	std::string upperMessage;
 	std::transform(message.begin(), message.end(), std::back_inserter(upperMessage), ::toupper);
-	printf("upperMessage: %s\n", upperMessage.c_str());
 	if (upperMessage == "SEND_FILE")
 	{
 		receiveFile(clientSocket);
@@ -182,10 +163,6 @@ void handleClientMessage(int clientSocket, const std::string &message)
 		close(clientSocket);
 		std::cout << "File transfer complete." << std::endl;
 	}
-std::cout << "upperMessage: " << upperMessage << std::endl;
-		//const char *response = "Hello, Client!";
-		//sendData(clientSocket, response, strlen(response));
-	
 }
 
 void sendFileData(int clientSocket)

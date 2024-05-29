@@ -112,13 +112,11 @@ int main()
 	{
 		sleep(1);
 		std::cout << "Waiting for server response..." << std::endl;
-		std::cout << "Server response: " << response << std::endl;
 	}
 
 	std::cout << "Server response: " << response << std::endl;
 
 	// Send the "CLOSE" message to the server
-	std::cout << "Server response: " << response << std::endl;
 	send(clientSocket, "CLOSE", 5, 0);
 	close(clientSocket);
 
