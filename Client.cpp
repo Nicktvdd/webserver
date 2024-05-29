@@ -71,30 +71,38 @@ int main()
 	// Send the file contents to the server in chunks
 	char buffer[1024];
 	file.read(buffer, sizeof(buffer));
-	while (file.gcount())
-	{
-		ssize_t bytesSent = send(clientSocket, buffer, file.gcount(), 0);
-		if (bytesSent < 0)
-		{
-			std::cerr << "Failed to send the file data. Error: " << strerror(errno) << std::endl;
-			return 1;
-		}
+while (file.gcount())
+{
+    ssize_t bytesSent = send(clientSocket, buffer, file.gcount(), 0);
+    if (bytesSent < 0)
+    {
+        std::cerr << "Failed to send the file data. Error: " << strerror(errno) << std::endl;
+        return 1;
+    }
 
-		// Wait for "ACK" response from the server
-		if (recv(clientSocket, response, sizeof(response), 0) < 0)
-		{
-			std::cerr << "Failed to receive a response." << std::endl;
-			return 1;
-		}
+    // Wait for "ACK" response from the server
+    ssize_t bytesReceived;
+    do
+    {
+        bytesReceived = recv(clientSocket, response, sizeof(response), 0);
+        if (bytesReceived < 0)
+        {
+            std::cerr << "Failed to receive a response." << std::endl;
+            return 1;
+        }
+    } while (bytesReceived <= 0);
 
-		if (strcmp(response, "ACK") != 0)
-		{
-			printf("response: %s\n", response);
-			std::cerr << "Server did not respond with ACK." << std::endl;
-			return 1;
-		}
-		file.read(buffer, sizeof(buffer));
-	}
+    if (strcmp(response, "ACK") != 0)
+    {
+        printf("response: %s\n", response);
+        std::cerr << "Server did not respond with ACK." << std::endl;
+        return 1;
+    }
+    file.read(buffer, sizeof(buffer));
+    send(clientSocket, message, strlen(message), 0);
+	usleep(500);
+
+}
 
 	// Close the file
 	file.close();

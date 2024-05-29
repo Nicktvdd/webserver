@@ -122,31 +122,44 @@ void sendData(int socket, const char *data, size_t dataSize)
 
 void receiveFile(int clientSocket)
 {
-	std::ofstream file(FILE_NAME, std::ios::out | std::ios::binary);
-	char buffer[MAX_BUFFER_SIZE];
-	ssize_t bytesRead;
-	const char *ack = "ACK";
+    std::ofstream file(FILE_NAME, std::ios::out | std::ios::binary);
+    char buffer[MAX_BUFFER_SIZE];
+    ssize_t bytesRead;
+    const char *ack = "ACK";
 
-	printf("Receiving file...\n");
-	send(clientSocket, ack, strlen(ack), 0);
-	sleep(1);
-	//std::cout << "HIHELLOTHERE!!!!!--------" << std::endl;
-	while ((bytesRead = recv(clientSocket, buffer, sizeof(buffer), 0)) > 0)
-	{
-		printf("Bytes read: %ld\n", bytesRead);
-		file.write(buffer, bytesRead);
-		// Send an acknowledgement to the client
+    printf("Receiving file...\n");
+    send(clientSocket, ack, strlen(ack), 0);
+    sleep(1);
 
-		if (send(clientSocket, ack, strlen(ack), 0) < 0)
-		{
-			std::cerr << "Failed to send acknowledgement." << std::endl;
-			close(clientSocket);
-			return;
-		}
-	}
-	file.close();
-	// Send a response back to the client
-	std::cout << "buffer: " << buffer << "\n\n\n" << std::endl;
+    do
+    {
+        bytesRead = recv(clientSocket, buffer, sizeof(buffer), 0);
+        if (bytesRead > 0 && strcmp(buffer, "FILE_COMPLETE") != 0)
+        {
+            printf("Bytes read: %ld\n", bytesRead);
+            file.write(buffer, bytesRead);
+
+            // Send an acknowledgement to the client
+            printf("Sending ACK\n");
+            int sendResult;
+            do
+            {
+                sendResult = send(clientSocket, ack, strlen(ack), 0);
+                if (sendResult < 0)
+                {
+                    std::cerr << "Failed to send acknowledgement. Retrying..." << std::endl;
+                }
+            } while (sendResult < 0);
+        }
+    } while (bytesRead > 0 && strcmp(buffer, "FILE_COMPLETE") != 0);
+
+    if (bytesRead < 0)
+    {
+        std::cerr << "Failed to receive data. Error: " << strerror(errno) << std::endl;
+    }
+
+    file.close();
+    std::cout << "buffer: " << buffer << "\n\n\n" << std::endl;
 }
 
 void handleClientMessage(int clientSocket, const std::string &message)
