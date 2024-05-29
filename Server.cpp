@@ -28,18 +28,27 @@ int createServerSocket()
 
 void bindServerSocket(int serverSocket)
 {
-	struct sockaddr_in serverAddress;
-	serverAddress.sin_family = AF_INET;
-	serverAddress.sin_addr.s_addr = INADDR_ANY;
-	serverAddress.sin_port = htons(SERVER_PORT);
+    struct sockaddr_in serverAddress;
+    serverAddress.sin_family = AF_INET;
+    serverAddress.sin_addr.s_addr = INADDR_ANY;
+    serverAddress.sin_port = htons(SERVER_PORT);
 
-	if (bind(serverSocket, (struct sockaddr *)&serverAddress, sizeof(serverAddress)) == -1)
-	{
-		std::cerr << "Failed to bind socket." << std::endl;
-		close(serverSocket);
-		exit(1);
-	}
+    int opt = 1;
+    if (setsockopt(serverSocket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1)
+    {
+        std::cerr << "Failed to set socket options." << std::endl;
+        close(serverSocket);
+        exit(1);
+    }
+
+    if (bind(serverSocket, (struct sockaddr *)&serverAddress, sizeof(serverAddress)) == -1)
+    {
+        std::cerr << "Failed to bind socket." << std::endl;
+        close(serverSocket);
+        exit(1);
+    }
 }
+
 
 void setSocketNonBlocking(int socket)
 {
@@ -114,28 +123,37 @@ void sendData(int socket, const char *data, size_t dataSize)
 
 void receiveFile(int clientSocket)
 {
-    std::ofstream file(FILE_NAME, std::ios::binary);
-    char buffer[MAX_BUFFER_SIZE];
-    ssize_t bytesRead;
+	std::ofstream file(FILE_NAME, std::ios::binary);
+	char buffer[MAX_BUFFER_SIZE];
+	ssize_t bytesRead;
 
-    while ((bytesRead = recv(clientSocket, buffer, sizeof(buffer), 0)) > 0)
-    {
-        file.write(buffer, bytesRead);
-    }
+	while ((bytesRead = recv(clientSocket, buffer, sizeof(buffer), 0)) > 0)
+	{
+		file.write(buffer, bytesRead);
 
-    if (bytesRead < 0)
-    {
-        std::cerr << "Failed to receive file." << std::endl;
-        close(clientSocket);
-    }
+		// Send an acknowledgement to the client
+		const char *ack = "ACK";
+		if (send(clientSocket, ack, strlen(ack), 0) < 0)
+		{
+			std::cerr << "Failed to send acknowledgement." << std::endl;
+			close(clientSocket);
+			return;
+		}
+	}
 
-    // Send a response back to the client
-    const char *response = "FILE_RECEIVED";
-    if (send(clientSocket, response, strlen(response), 0) < 0)
-    {
-        std::cerr << "Failed to send response." << std::endl;
-        close(clientSocket);
-    }
+	if (bytesRead < 0)
+	{
+		std::cerr << "Failed to receive file." << std::endl;
+		close(clientSocket);
+	}
+
+	// Send a response back to the client
+	const char *response = "FILE_RECEIVED";
+	if (send(clientSocket, response, strlen(response), 0) < 0)
+	{
+		std::cerr << "Failed to send response." << std::endl;
+		close(clientSocket);
+	}
 }
 
 void handleClientMessage(int clientSocket, const std::string &message)
@@ -145,6 +163,11 @@ void handleClientMessage(int clientSocket, const std::string &message)
 	if (upperMessage == "SEND_FILE")
 	{
 		receiveFile(clientSocket);
+	}
+	else if (upperMessage == "FILE_COMPLETE")
+	{
+		close(clientSocket);
+		std::cout << "File transfer complete." << std::endl;
 	}
 	else
 	{
