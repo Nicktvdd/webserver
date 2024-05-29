@@ -56,7 +56,7 @@ int main()
 
 	char response[1024] = {0};
 	// Wait for a response from the server to receive file
-		if (recv(clientSocket, response, sizeof(response), 0) < 0)
+	if (recv(clientSocket, response, sizeof(response), 0) < 0)
 	{
 		std::cerr << "Failed to receive a response." << std::endl;
 		return 1;
@@ -94,12 +94,11 @@ int main()
 			return 1;
 		}
 		file.read(buffer, sizeof(buffer));
-		printf("buffer: %s\n", buffer);
 	}
 
 	// Close the file
 	file.close();
-
+	sleep(1);
 	// Send the file completion signal to the server
 	const char *completionSignal = "FILE_COMPLETE";
 	if (send(clientSocket, completionSignal, strlen(completionSignal), 0) < 0)
@@ -109,22 +108,17 @@ int main()
 	}
 
 	// Receive a response from the server
-	if (recv(clientSocket, response, sizeof(response), 0) < 0)
+	while (recv(clientSocket, response, sizeof(response), 0) || strcmp(response, "FILE_RECEIVED"))
 	{
-		std::cerr << "Failed to receive a response." << std::endl;
-		return 1;
+		sleep(1);
+		std::cout << "Waiting for server response..." << std::endl;
+		std::cout << "Server response: " << response << std::endl;
 	}
 
 	std::cout << "Server response: " << response << std::endl;
 
-	// Close the socket
-		while (strcmp(response, "FILE_RECEIVED"))
-		{
-			sleep(1);
-			std::cout << "Waiting for server response..." << std::endl;
-		}
-	
-
+	// Send the "CLOSE" message to the server
+	std::cout << "Server response: " << response << std::endl;
 	send(clientSocket, "CLOSE", 5, 0);
 	close(clientSocket);
 

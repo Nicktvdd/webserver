@@ -28,27 +28,26 @@ int createServerSocket()
 
 void bindServerSocket(int serverSocket)
 {
-    struct sockaddr_in serverAddress;
-    serverAddress.sin_family = AF_INET;
-    serverAddress.sin_addr.s_addr = INADDR_ANY;
-    serverAddress.sin_port = htons(SERVER_PORT);
+	struct sockaddr_in serverAddress;
+	serverAddress.sin_family = AF_INET;
+	serverAddress.sin_addr.s_addr = INADDR_ANY;
+	serverAddress.sin_port = htons(SERVER_PORT);
 
-    int opt = 1;
-    if (setsockopt(serverSocket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1)
-    {
-        std::cerr << "Failed to set socket options." << std::endl;
-        close(serverSocket);
-        exit(1);
-    }
+	int opt = 1;
+	if (setsockopt(serverSocket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1)
+	{
+		std::cerr << "Failed to set socket options." << std::endl;
+		close(serverSocket);
+		exit(1);
+	}
 
-    if (bind(serverSocket, (struct sockaddr *)&serverAddress, sizeof(serverAddress)) == -1)
-    {
-        std::cerr << "Failed to bind socket." << std::endl;
-        close(serverSocket);
-        exit(1);
-    }
+	if (bind(serverSocket, (struct sockaddr *)&serverAddress, sizeof(serverAddress)) == -1)
+	{
+		std::cerr << "Failed to bind socket." << std::endl;
+		close(serverSocket);
+		exit(1);
+	}
 }
-
 
 void setSocketNonBlocking(int socket)
 {
@@ -130,11 +129,22 @@ void receiveFile(int clientSocket)
 
 	printf("Receiving file...\n");
 	send(clientSocket, ack, strlen(ack), 0);
+	sleep(1);
+	//std::cout << "HIHELLOTHERE!!!!!--------" << std::endl;
 	while ((bytesRead = recv(clientSocket, buffer, sizeof(buffer), 0)) > 0)
 	{
 		printf("Bytes read: %ld\n", bytesRead);
+/* 		if (strcmp(buffer, "FILE_COMPLETE") == 0)
+		{
+			const char *response = "FILE_RECEIVED";
+			if (send(clientSocket, response, strlen(response), 0) < 0)
+			{
+				std::cerr << "Failed to send response." << std::endl;
+				close(clientSocket);
+				break;
+			}
+		} */
 		file.write(buffer, bytesRead);
-
 		// Send an acknowledgement to the client
 
 		if (send(clientSocket, ack, strlen(ack), 0) < 0)
@@ -144,40 +154,38 @@ void receiveFile(int clientSocket)
 			return;
 		}
 	}
+	file.close();
 
-	if (bytesRead < 0)
-	{
-		std::cerr << "Failed to receive file. errno: " << strerror(errno) << std::endl;
-		close(clientSocket);
-	}
-
+/* 		if (bytesRead < 0)
+		{
+			std::cerr << "Failed to receive file. errno: " << strerror(errno) << std::endl;
+			close(clientSocket);
+		} */
+		printf("Bytes read: %ld\n", bytesRead);
 	// Send a response back to the client
-	const char *response = "FILE_RECEIVED";
-	if (send(clientSocket, response, strlen(response), 0) < 0)
-	{
-		std::cerr << "Failed to send response." << std::endl;
-		close(clientSocket);
-	}
+	std::cout << "buffer: " << buffer << "\n\n\n"
+			  << std::endl;
 }
 
 void handleClientMessage(int clientSocket, const std::string &message)
 {
 	std::string upperMessage;
 	std::transform(message.begin(), message.end(), std::back_inserter(upperMessage), ::toupper);
+	printf("upperMessage: %s\n", upperMessage.c_str());
 	if (upperMessage == "SEND_FILE")
 	{
 		receiveFile(clientSocket);
 	}
-	else if (upperMessage == "FILE_COMPLETE")
+	if (upperMessage == "FILE_COMPLETE")
 	{
+		send(clientSocket, "FILE_RECEIVED", strlen("FILE_RECEIVED"), 0);
 		close(clientSocket);
 		std::cout << "File transfer complete." << std::endl;
 	}
-	else
-	{
-		const char *response = "Hello, Client!";
-		sendData(clientSocket, response, strlen(response));
-	}
+std::cout << "upperMessage: " << upperMessage << std::endl;
+		//const char *response = "Hello, Client!";
+		//sendData(clientSocket, response, strlen(response));
+	
 }
 
 void sendFileData(int clientSocket)
@@ -214,7 +222,7 @@ int main()
 	fds[0].events = POLLIN;
 
 	int numClients = 0;
-			printf("Number of clients: %d\n", numClients);
+	printf("Number of clients: %d\n", numClients);
 
 	while (true)
 	{
@@ -275,9 +283,9 @@ int main()
 			}
 		}
 
-		fds.erase(std::remove_if(fds.begin() + 1, fds.end(), [](const pollfd &fd) {
-			return fd.fd == -1;
-		}), fds.end());
+		fds.erase(std::remove_if(fds.begin() + 1, fds.end(), [](const pollfd &fd)
+								 { return fd.fd == -1; }),
+				  fds.end());
 		numClients = fds.size() - 1;
 	}
 
