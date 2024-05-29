@@ -54,9 +54,24 @@ int main()
 		return 1;
 	}
 
-	// Send the file contents to the server
+	char response[1024] = {0};
+	// Wait for a response from the server to receive file
+		if (recv(clientSocket, response, sizeof(response), 0) < 0)
+	{
+		std::cerr << "Failed to receive a response." << std::endl;
+		return 1;
+	}
+
+	while (strcmp(response, "ACK"))
+	{
+		sleep(1);
+		std::cout << "Waiting for server response..." << std::endl;
+	}
+
+	// Send the file contents to the server in chunks
 	char buffer[1024];
-	while (file.read(buffer, sizeof(buffer)))
+	file.read(buffer, sizeof(buffer));
+	while (file.gcount())
 	{
 		ssize_t bytesSent = send(clientSocket, buffer, file.gcount(), 0);
 		if (bytesSent < 0)
@@ -64,17 +79,26 @@ int main()
 			std::cerr << "Failed to send the file data. Error: " << strerror(errno) << std::endl;
 			return 1;
 		}
+
+		// Wait for "ACK" response from the server
+		if (recv(clientSocket, response, sizeof(response), 0) < 0)
+		{
+			std::cerr << "Failed to receive a response." << std::endl;
+			return 1;
+		}
+
+		if (strcmp(response, "ACK") != 0)
+		{
+			printf("response: %s\n", response);
+			std::cerr << "Server did not respond with ACK." << std::endl;
+			return 1;
+		}
+		file.read(buffer, sizeof(buffer));
+		printf("buffer: %s\n", buffer);
 	}
 
 	// Close the file
 	file.close();
-
-	// Notify the server that the file upload is complete
-	if (send(clientSocket, "", 0, 0) < 0)
-	{
-		std::cerr << "Failed to send the file completion signal." << std::endl;
-		return 1;
-	}
 
 	// Send the file completion signal to the server
 	const char *completionSignal = "FILE_COMPLETE";
@@ -85,7 +109,6 @@ int main()
 	}
 
 	// Receive a response from the server
-	char response[1024] = {0};
 	if (recv(clientSocket, response, sizeof(response), 0) < 0)
 	{
 		std::cerr << "Failed to receive a response." << std::endl;
@@ -95,6 +118,14 @@ int main()
 	std::cout << "Server response: " << response << std::endl;
 
 	// Close the socket
+		while (strcmp(response, "FILE_RECEIVED"))
+		{
+			sleep(1);
+			std::cout << "Waiting for server response..." << std::endl;
+		}
+	
+
+	send(clientSocket, "CLOSE", 5, 0);
 	close(clientSocket);
 
 	return 0;

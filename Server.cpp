@@ -123,17 +123,20 @@ void sendData(int socket, const char *data, size_t dataSize)
 
 void receiveFile(int clientSocket)
 {
-	std::ofstream file(FILE_NAME, std::ios::binary);
+	std::ofstream file(FILE_NAME, std::ios::out | std::ios::binary);
 	char buffer[MAX_BUFFER_SIZE];
 	ssize_t bytesRead;
+	const char *ack = "ACK";
 
+	printf("Receiving file...\n");
+	send(clientSocket, ack, strlen(ack), 0);
 	while ((bytesRead = recv(clientSocket, buffer, sizeof(buffer), 0)) > 0)
 	{
 		printf("Bytes read: %ld\n", bytesRead);
 		file.write(buffer, bytesRead);
 
 		// Send an acknowledgement to the client
-		const char *ack = "ACK";
+
 		if (send(clientSocket, ack, strlen(ack), 0) < 0)
 		{
 			std::cerr << "Failed to send acknowledgement." << std::endl;
@@ -144,7 +147,7 @@ void receiveFile(int clientSocket)
 
 	if (bytesRead < 0)
 	{
-		std::cerr << "Failed to receive file." << std::endl;
+		std::cerr << "Failed to receive file. errno: " << strerror(errno) << std::endl;
 		close(clientSocket);
 	}
 
@@ -206,7 +209,7 @@ int main()
 
 	std::cout << "Server started. Listening on port " << SERVER_PORT << "..." << std::endl;
 
-	std::vector<pollfd> fds;
+	std::vector<pollfd> fds(MAX_CLIENTS + 1, {-1, POLLIN});
 	fds[0].fd = serverSocket;
 	fds[0].events = POLLIN;
 
@@ -228,11 +231,13 @@ int main()
 			if (newSocket != -1)
 			{
 				std::cout << "New connection established." << std::endl;
+
 				setSocketNonBlocking(newSocket);
 
 				if (numClients < MAX_CLIENTS)
 				{
 					numClients++;
+					std::cout << "Number of clients start: " << numClients << std::endl;
 					fds[numClients].fd = newSocket;
 					fds[numClients].events = POLLIN;
 				}
