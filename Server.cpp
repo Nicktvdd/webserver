@@ -11,7 +11,7 @@
 #include <algorithm>
 
 const int MAX_BUFFER_SIZE = 1024;
-const int MAX_CLIENTS = 10;
+const int MAX_CLIENTS = 1000000;
 const int SERVER_PORT = 8080;
 const std::string FILE_NAME = "ReceivedFile.txt";
 
@@ -129,6 +129,7 @@ void receiveFile(int clientSocket)
 
 	while ((bytesRead = recv(clientSocket, buffer, sizeof(buffer), 0)) > 0)
 	{
+		printf("Bytes read: %ld\n", bytesRead);
 		file.write(buffer, bytesRead);
 
 		// Send an acknowledgement to the client
@@ -205,11 +206,12 @@ int main()
 
 	std::cout << "Server started. Listening on port " << SERVER_PORT << "..." << std::endl;
 
-	std::vector<pollfd> fds(MAX_CLIENTS + 1);
+	std::vector<pollfd> fds;
 	fds[0].fd = serverSocket;
 	fds[0].events = POLLIN;
 
 	int numClients = 0;
+			printf("Number of clients: %d\n", numClients);
 
 	while (true)
 	{
