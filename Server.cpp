@@ -151,7 +151,7 @@ void receiveFile(int clientSocket)
 	if (bytesRead > 0)
 	{
 		printf("Bytes read: %ld\n", bytesRead);
-		clientStates[clientSocket].file->write(buffer, bytesRead);
+		clientStates[clientSocket].file->write(buffer, bytesRead); //
 
 		// Send an acknowledgement to the client
 		printf("Sending ACK\n");
@@ -162,14 +162,7 @@ void receiveFile(int clientSocket)
 		std::cerr << "Failed to receive data. Error: " << strerror(errno) << std::endl;
 		return;
 	}
-
-	// Check if the file transfer is complete
-	if (strcmp(buffer, "FILE_COMPLETE") == 0)
-	{
-		clientStates[clientSocket].file->close();
-		clientStates[clientSocket].transferInProgress = false;
-		std::cout << "File transfer complete." << std::endl;
-	}
+	sleep(5);
 }
 
 void handleClientMessage(int clientSocket, const std::string &message)
@@ -180,8 +173,10 @@ void handleClientMessage(int clientSocket, const std::string &message)
 	{
 		receiveFile(clientSocket);
 	}
-	if (upperMessage == "FILE_COMPLETE")
+	else if (upperMessage == "FILE_COMPLETE")
 	{
+		clientStates[clientSocket].file->close();
+		clientStates[clientSocket].transferInProgress = false;
 		send(clientSocket, "FILE_RECEIVED", strlen("FILE_RECEIVED"), 0);
 		close(clientSocket);
 		std::cout << "File transfer complete." << std::endl;
