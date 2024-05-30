@@ -9,6 +9,8 @@
 #include <fstream>
 #include <vector>
 #include <algorithm>
+#include <map>
+#include <memory>
 
 const int MAX_BUFFER_SIZE = 1024;
 const int MAX_CLIENTS = 1000000;
@@ -120,53 +122,61 @@ void sendData(int socket, const char *data, size_t dataSize)
 	}
 }
 
+struct FileTransferState
+{
+	std::unique_ptr<std::ofstream> file;
+	bool transferInProgress;
+};
+
+std::map<int, FileTransferState> clientStates;
+
 void receiveFile(int clientSocket)
 {
-    std::ofstream file(FILE_NAME, std::ios::out | std::ios::binary);
-    char buffer[MAX_BUFFER_SIZE];
-    ssize_t bytesRead;
-    const char *ack = "ACK";
+	char buffer[MAX_BUFFER_SIZE];
+	ssize_t bytesRead;
+	const char *ack = "ACK";
 
-    printf("Receiving file...\n");
-    send(clientSocket, ack, strlen(ack), 0);
-    sleep(1);
+	// Check if a file transfer is already in progress
+	if (!clientStates[clientSocket].transferInProgress)
+	{
+		// Start a new file transfer
+		clientStates[clientSocket].file.reset(new std::ofstream(FILE_NAME, std::ios::out | std::ios::binary));
+		clientStates[clientSocket].transferInProgress = true;
+		printf("Receiving file...\n");
+		send(clientSocket, ack, strlen(ack), 0);
+	}
 
-    do
-    {
-        bytesRead = recv(clientSocket, buffer, sizeof(buffer), 0);
-        if (bytesRead > 0 && strcmp(buffer, "FILE_COMPLETE") != 0)
-        {
-            printf("Bytes read: %ld\n", bytesRead);
-            file.write(buffer, bytesRead);
+	// Receive a chunk of the file
+	bytesRead = recv(clientSocket, buffer, sizeof(buffer), 0);
+	if (bytesRead > 0)
+	{
+		printf("Bytes read: %ld\n", bytesRead);
+		clientStates[clientSocket].file->write(buffer, bytesRead);
 
-            // Send an acknowledgement to the client
-            printf("Sending ACK\n");
-            int sendResult;
-            do
-            {
-                sendResult = send(clientSocket, ack, strlen(ack), 0);
-                if (sendResult < 0)
-                {
-                    std::cerr << "Failed to send acknowledgement. Retrying..." << std::endl;
-                }
-            } while (sendResult < 0);
-        }
-    } while (bytesRead > 0 && strcmp(buffer, "FILE_COMPLETE") != 0);
+		// Send an acknowledgement to the client
+		printf("Sending ACK\n");
+		send(clientSocket, ack, strlen(ack), 0);
+	}
+	else if (bytesRead < 0)
+	{
+		std::cerr << "Failed to receive data. Error: " << strerror(errno) << std::endl;
+		return;
+	}
 
-    if (bytesRead < 0)
-    {
-        std::cerr << "Failed to receive data. Error: " << strerror(errno) << std::endl;
-    }
-
-    file.close();
-    std::cout << "buffer: " << buffer << "\n\n\n" << std::endl;
+	// Check if the file transfer is complete
+	if (strcmp(buffer, "FILE_COMPLETE") == 0)
+	{
+		clientStates[clientSocket].file->close();
+		clientStates[clientSocket].transferInProgress = false;
+		std::cout << "File transfer complete." << std::endl;
+	}
 }
 
 void handleClientMessage(int clientSocket, const std::string &message)
 {
 	std::string upperMessage;
 	std::transform(message.begin(), message.end(), std::back_inserter(upperMessage), ::toupper);
-	if (upperMessage == "SEND_FILE")
+	if (upperMessage == "SEND_FILE" || clientStates[clientSocket].transferInProgress)
 	{
 		receiveFile(clientSocket);
 	}
