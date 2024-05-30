@@ -136,10 +136,13 @@ void receiveFile(int clientSocket)
 	ssize_t bytesRead;
 	const char *ack = "ACK";
 
+	std::cout << "HELLO FROM RECEIVEFILE\n"
+			  << std::endl;
+
 	// Check if a file transfer is already in progress
 	if (!clientStates[clientSocket].transferInProgress)
 	{
-			send(clientSocket, ack, strlen(ack), 0);
+		send(clientSocket, ack, strlen(ack), 0);
 		// Start a new file transfer
 		clientStates[clientSocket].file.reset(new std::ofstream(FILE_NAME, std::ios::out | std::ios::binary));
 		clientStates[clientSocket].transferInProgress = true;
@@ -148,39 +151,56 @@ void receiveFile(int clientSocket)
 
 	// Receive a chunk of the file
 	bytesRead = recv(clientSocket, buffer, sizeof(buffer), 0);
-	printf("hiyo\n");
 	if (bytesRead > 0)
 	{
+		send(clientSocket, ack, strlen(ack), 0);
 		printf("Bytes read: %ld\n", bytesRead);
 		clientStates[clientSocket].file->write(buffer, bytesRead); //
-
 		// Send an acknowledgement to the client
 		printf("Sending ACK\n");
-		send(clientSocket, ack, strlen(ack), 0);
 	}
 	else if (bytesRead < 0)
 	{
 		std::cerr << "Failed to receive data. Error: " << strerror(errno) << std::endl;
+		std::cout << "FUCKBuffer: " << buffer << std::endl;
 		return;
 	}
-	sleep(5);
 }
 
-void handleClientMessage(int clientSocket, const std::string &message)
+void continueReceiveFile(int clientSocket, const std::string &message, ssize_t bytesReceived)
 {
-	std::string upperMessage;
-	std::transform(message.begin(), message.end(), std::back_inserter(upperMessage), ::toupper);
-	if (upperMessage == "SEND_FILE" || clientStates[clientSocket].transferInProgress)
+	char buffer[MAX_BUFFER_SIZE];
+	const char *ack = "ACK";
+
+	std::cout << "HELLO FROM CONTINUERECEIVEFILE\n"
+			  << std::endl;
+
+	// Start a new file transfer
+	printf(" Continue Receiving file...\n");
+	clientStates[clientSocket].file->write(message.c_str(), message.size());
+
+	printf("Sending ACK\n");
+	send(clientSocket, ack, strlen(ack), 0);
+}
+
+void handleClientMessage(int clientSocket, const std::string &message, ssize_t bytesReceived)
+{
+	std::cout << "message: " << message << std::endl;
+	if (message == "SEND_FILE")
 	{
 		receiveFile(clientSocket);
 	}
-	else if (upperMessage == "FILE_COMPLETE")
+	else if (message == "FILE_COMPLETE")
 	{
+		send(clientSocket, "FILE_RECEIVED", strlen("FILE_RECEIVED"), 0);
 		clientStates[clientSocket].file->close();
 		clientStates[clientSocket].transferInProgress = false;
-		send(clientSocket, "FILE_RECEIVED", strlen("FILE_RECEIVED"), 0);
 		close(clientSocket);
 		std::cout << "File transfer complete." << std::endl;
+	}
+	else if (clientStates[clientSocket].transferInProgress == true)
+	{
+		continueReceiveFile(clientSocket, message, bytesReceived);
 	}
 }
 
@@ -262,7 +282,7 @@ int main()
 				if (bytesReceived > 0)
 				{
 					std::cout << "Client message: " << buffer << std::endl;
-					handleClientMessage(fds[i].fd, buffer);
+					handleClientMessage(fds[i].fd, buffer, bytesReceived);
 				}
 				else if (bytesReceived == 0)
 				{
