@@ -45,36 +45,37 @@ int main()
 		return 1;
 	}
 
-	// Send the "SEND_FILE" message to the server
 	const char *message = "SEND_FILE";
-	ssize_t bytesSent = send(clientSocket, message, strlen(message), 0);
-	if (bytesSent < 0)
-	{
-		std::cerr << "Failed to send the message. Error: " << strerror(errno) << std::endl;
-		return 1;
-	}
-
 	char response[1024] = {0};
-	// Wait for a response from the server to receive file
-	if (recv(clientSocket, response, sizeof(response), 0) < 0)
-	{
-		std::cerr << "Failed to receive a response." << std::endl;
-		return 1;
-	}
-
-	while (strcmp(response, "ACK") != 0)
-	{
-		std::cout << "responseACK0: " << response << "\n";
-		sleep(1);
-		std::cout << "Waiting for server response..." << std::endl;
-	}
 
 	// Send the file contents to the server in chunks
 	char buffer[1024];
 	file.read(buffer, sizeof(buffer));
 	while (file.gcount()) // while there are still bytes to read from the file
 	{
-		ssize_t bytesSent = send(clientSocket, buffer, file.gcount(), 0); // send the bytes read from the file
+		// Send the "SEND_FILE" message to the server
+		ssize_t bytesSent = send(clientSocket, message, strlen(message), 0);
+		if (bytesSent < 0)
+		{
+			std::cerr << "Failed to send the message. Error: " << strerror(errno) << std::endl;
+			return 1;
+		}
+		// Wait for a response from the server
+		if (recv(clientSocket, response, sizeof(response), 0) < 0)
+		{
+			std::cerr << "Failed to receive a response." << std::endl;
+			return 1;
+		}
+		// Check if the response is "ACK"
+		while (strcmp(response, "ACK") != 0)
+		{
+			std::cout << "responseACK0: " << response << "\n";
+			sleep(1);
+			std::cout << "Waiting for server response..." << std::endl;
+		}
+
+		// old stuff here-------------------
+		bytesSent = send(clientSocket, buffer, file.gcount(), 0); // send the bytes read from the file
 		if (bytesSent < 0)
 		{
 			std::cerr << "Failed to send the file data. Error: " << strerror(errno) << std::endl;
@@ -106,7 +107,11 @@ int main()
 			}
 			std::cout << "Waiting for server response... responseWAITACK: " << response << std::endl;
 		}
-		send(clientSocket, message, strlen(message), 0);
+		if (strcmp(response, "FILE_RECEIVED") == 0)
+		{
+			std::cout << "File received by the server." << std::endl;
+			return 1;
+		}
 		file.read(buffer, sizeof(buffer));
 	}
 

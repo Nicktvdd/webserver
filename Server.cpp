@@ -139,15 +139,16 @@ void receiveFile(int clientSocket)
 	// Check if a file transfer is already in progress
 	if (!clientStates[clientSocket].transferInProgress)
 	{
+			send(clientSocket, ack, strlen(ack), 0);
 		// Start a new file transfer
 		clientStates[clientSocket].file.reset(new std::ofstream(FILE_NAME, std::ios::out | std::ios::binary));
 		clientStates[clientSocket].transferInProgress = true;
 		printf("Receiving file...\n");
-		send(clientSocket, ack, strlen(ack), 0);
 	}
 
 	// Receive a chunk of the file
 	bytesRead = recv(clientSocket, buffer, sizeof(buffer), 0);
+	printf("hiyo\n");
 	if (bytesRead > 0)
 	{
 		printf("Bytes read: %ld\n", bytesRead);
