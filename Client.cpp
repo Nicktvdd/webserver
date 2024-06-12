@@ -8,6 +8,7 @@
 
 int main()
 {
+	//more testing
 	int clientSocket;
 	struct sockaddr_in serverAddress;
 
